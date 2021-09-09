@@ -1,0 +1,28 @@
+{
+    "id": "7659E8C3",
+    "path": "C:/Users/zack_/OneDrive/2020 UofM/Recreation Ecology Trends/Detailed Analysis.R",
+    "project_path": "Detailed Analysis.R",
+    "type": "r_source",
+    "hash": "3862624067",
+    "contents": "",
+    "dirty": false,
+    "created": 1622042689035.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "tempName": "Untitled1",
+        "cursorPosition": "268,4",
+        "scrollLine": "0",
+        "docOutlineVisible": "0",
+        "docOutlineSize": "147",
+        "Source": "Source"
+    },
+    "folds": "0|18|1|0|\n2|6|6|0|\n7|19|42|0|\n9|40|40|2|\n43|22|53|2|\n54|60|80|2|\n81|31|102|0|\n103|44|214|4|\n215|23|255|2|\n256|37|268|4|\n",
+    "lastKnownWriteTime": 1630620608,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1631125599746,
+    "read_only": false,
+    "read_only_alternatives": []
+}

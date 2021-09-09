@@ -1,0 +1,33 @@
+{
+    "id": "BE3F99B6",
+    "path": null,
+    "project_path": null,
+    "type": "r_dataframe",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1630615630947.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "expression": "vdf",
+        "caption": "vdf",
+        "totalObservations": 125,
+        "displayedObservations": 125,
+        "variables": 12,
+        "cacheKey": "A105BD11",
+        "object": "vdf",
+        "environment": "",
+        "contentUrl": "grid_resource/gridviewer.html?env=&obj=vdf&cache_key=A105BD11&max_cols=50",
+        "preview": 0,
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 8319064904856710260,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1630615630947,
+    "read_only": false,
+    "read_only_alternatives": []
+}

@@ -1,0 +1,269 @@
+#Detailed Analysis####
+
+#Admin####
+  library(gtrendsR)
+  library(tidyverse)
+  library(readxl)
+
+#Data Read Function####
+  #ignoring group trips, which is likely a mistake
+  clean.data<-function(sheet.name,year){
+    x<-read_excel("Input/PC_NationalParks_Visitation_2015-21.xlsx",sheet=sheet.name)
+    months<-colnames(x)[4:15]
+    months.order<-c("Jan","Feb","Mar","April","May","June","July","Aug","Sep","Oct","Nov","Dec")
+    places<-x$place
+    
+    names<-c("place","type","year.fiscal","year","month","month.n","visitation")
+    new<-data.frame(NA); new[1:length(names)]<-NA; colnames(new)<-names; tmp<-new
+    
+    for(p in places){
+      sub1<-subset(x,place==p)
+      for(m in months){
+        tmp$place<-p
+        tmp$type<-sub1$type
+        tmp$year.fiscal<-sub1$year.fiscal
+        tmp$month<-m
+        tmp$visitation<-as.numeric(sub1[m])
+        
+        new<-rbind(new,tmp)
+      }
+    }
+    
+    new<-new[-1,]
+      
+      for(r in 1:nrow(new)){
+        new$year[r]<-if(new$month[r] %in% months[1:9]) {year} else {(year+1)}
+        new$month.n[r]<-match(new$month[r],months.order)
+      }
+      new$date<-paste(new$year,"-",new$month.n,"-",15,sep="")
+      new$date<-as.POSIXct(new$date)
+    return(new)
+  }
+
+
+#Visitation Data Frame####
+  
+  #Using the clean.data function to bind all data into one dataframe
+  visitation<-rbind(clean.data("2015-16",2015),
+                    clean.data("2016-17",2016),
+                    clean.data("2017-18",2017),
+                    clean.data("2018-19",2018),
+                    clean.data("2019-20",2019),
+                    clean.data("2020-21",2020))  
+  visitation<-visitation[order(visitation$place),]
+  
+#Extracting information about visitation rates over the term####
+  vdf<-summarize(group_by(visitation,place),
+                            max=max(na.omit(visitation)),
+                            mean=mean(na.omit(visitation)),
+                            total=sum(na.omit(visitation)))
+    
+  #adding model columns for later
+    vdf$r<-as.numeric(NA)
+    vdf$b<-as.numeric(NA)
+    vdf$b.se<-as.numeric(NA)
+    vdf$b.p<-as.numeric(NA)
+    vdf$m<-as.numeric(NA)
+    vdf$m.se<-as.numeric(NA)
+    vdf$m.p<-as.numeric(NA)
+    vdf$l<-as.numeric(NA)
+
+  #Choosing the threshold for excluding very low visitation sites (per month)
+    vdf<-vdf[-which(is.na(vdf$mean)),]
+    
+    #visitation_cutoff<-20000#running with 1000, 5000, result in NULL values for some trends searches
+  
+    #vdf<-vdf[-which(vdf$max<visitation_cutoff),]
+
+  #Creating the places vector
+    places<-c(levels(as.factor(vdf$place)))
+    places<-gsub("/"," ",places)
+  
+#Calculating Relative Abundance####
+  visitation$visitation_rel<-NA
+  
+    for(r in 1:nrow(visitation)){
+      #finding name of place in row
+      p<-visitation$place[r]
+      v<-visitation$visitation[r]
+      
+      #is visitation NA?
+      check1<-is.na(v);check1
+
+      #is the place in the list of places above the cutoff?
+      check2<-p%in%places;check2
+      
+      #if statement for calculating relative abundance
+      rel<-ifelse(check1==TRUE,NA,
+                  ifelse(check2==FALSE,NA,
+                         v/vdf$max[which(vdf$place==p)]))
+      
+      visitation$visitation_rel[r]<-(rel*100)
+    }
+
+#Analyzing Individual Visitation Time Series####
+  #setting limits & key traits for search
+    ylim=c(0,100)
+    xlim=as.POSIXct(c("2015-04-01","2021-03-31"))
+    country<-c("CA")
+    time<-("2015-04-01 2021-03-31")
+    channel<-"web"
+
+  #looping through each place for time series and extracting data
+  for (p in places){
+    sub<-subset(visitation,place==p)
+    
+    #extracting trends
+    keyword<-paste(sub$place[1],sub$type[1])
+    
+    #trends for keyword (with place type, not used)
+    trend_key<-gtrends(keyword, gprop=channel,geo=country, time=time )
+      time_key<-trend_key$interest_over_time
+    
+    #trends for place name alone (used)
+      trend_p<-gtrends(p, gprop=channel,geo=country, time=time ) 
+      
+  #ESCAPE for terms no trends results
+if(is.null(trend_p$interest_over_time)==FALSE){
+  
+    time_p<-trend_p$interest_over_time
+    
+    #extracting trend for 'NAME National Park' first, if NULL, then just 'NAME'
+    tdf<-if(is.null(time_key)==TRUE) {time_p} else {time_key}
+    main<-if(is.null(time_key)==TRUE) {p} else {keyword}
+    
+    #Grouping time trend results to months for correlation
+        
+        tdf$month<-format(tdf$date,"%m")
+        tdf$year<-format(tdf$date,"%Y")
+      #setting date to the 15th of each month to match with PC data
+        tdf$date.group<-as.POSIXct(interaction(tdf$year,tdf$month,15),format="%Y.%m.%d")
+
+      #averaging relative interest across the month
+        tdf_sum<-summarize(group_by(tdf,date.group),
+                                mean=mean(na.omit(hits)),
+                                max=max(na.omit(hits)),
+                                median=na.omit(median(hits)))
+        #number of days in period with data
+        l<-length(which(tdf_sum$max>0))
+        vdf[which(vdf$place==p),"l"]<-l
+        
+      #matching relative interest and visitation in the sub df  
+        sub$interest_rel<-NA
+        for (r in 1:nrow(sub)){
+          d<-sub$date[r]
+          y<-which(tdf_sum$date.group==d)
+          i<-ifelse(length(y)==0,NA,tdf_sum$max[y])
+
+          sub$interest_rel[r]<-i
+        }
+
+      #extracting correlation coefficients  
+          lm<-lm(interest_rel~visitation_rel,data=sub)
+          lm.sum<-summary(lm)
+          b<-lm.sum$coefficients[1,1]
+          b.se<-lm.sum$coefficients[1,2]
+          b.p<-lm.sum$coefficients[1,4]
+          
+          m<-lm.sum$coefficients[2,1]
+          m.se<-lm.sum$coefficients[2,2]
+          m.p<-lm.sum$coefficients[2,4]
+          
+          r<-lm.sum$adj.r.squared
+          
+      #adding correlation coefficients to vdf df
+          vdf[which(vdf$place==p),"r"]<-r
+          vdf[which(vdf$place==p),"b"]<-b
+          vdf[which(vdf$place==p),"b.se"]<-b.se
+          vdf[which(vdf$place==p),"b.p"]<-b.p
+          vdf[which(vdf$place==p),"m"]<-m
+          vdf[which(vdf$place==p),"m.se"]<-m.se
+          vdf[which(vdf$place==p),"m.p"]<-m.p
+      
+          
+      #Printing Correlation Figure
+        ggplot(sub,aes(x=visitation_rel, y=interest_rel))+
+          geom_point()+geom_smooth(method="lm",se=FALSE)+
+          xlim(0,100)+ylim(0,100)+
+          xlab("Relative Visitation (%)")+ylab("Relative Interest (%)")+
+          ggtitle(main)+
+          annotate("text",x=10,y=100,label=paste(
+            "y = ",round(m,2),"x + ",round(b,2)," adj.R^2 = ",round(r,2),sep=""))+
+          theme(panel.background = element_blank(),
+                panel.border = element_rect(fill=NA))
+        ggsave(filename=paste("Output_Detailed/",p,"_Correlation.jpg",sep=""),
+               width=11,height=8.5)
+        
+      #Printing Time-Series Figure
+        ggplot(sub,aes(x=date,y=visitation_rel))+
+          geom_line()+
+          geom_line(aes(x=date,y=interest_rel),col="blue")+
+          xlab("Date (Months)")+ylab("Relative Interest or Visitation (%)")+
+          ggtitle(main)+
+          theme(panel.background = element_blank(),
+                panel.border = element_rect(fill=NA))
+    
+        ggsave(filename=paste("Output_Detailed/",p,"_TimeSeries.jpg",sep=""),
+               width=11,height=8.5)
+        
+        } else {#IF no trends results are found, 
+          #length of days with viable trends results = 0 
+          vdf[which(vdf$place==p),"l"]<-0
+               }
+  }#end for loop
+
+    
+#Examining Correlations####
+    
+    lm_max1<-(lm(r~poly(max,1),data=vdf))
+    lm_max2<-(lm(r~poly(max,2),data=vdf))
+    lm_max3<-(lm(r~poly(max,3),data=vdf))
+    
+    lm_mean1<-(lm(r~poly(mean,1),data=vdf))
+    lm_mean2<-(lm(r~poly(mean,2),data=vdf))
+    lm_mean3<-(lm(r~poly(mean,3),data=vdf))
+    
+    lm_total1<-(lm(r~poly(total,1),data=vdf))
+    lm_total2<-(lm(r~poly(total,2),data=vdf))
+    lm_total3<-(lm(r~poly(total,3),data=vdf))
+
+    #Using AIC to pick best model
+    aic_test<-AIC(
+      lm_max1, lm_max2, lm_max3, 
+      lm_mean1,lm_mean2,lm_mean3,
+      lm_total1, lm_total2, lm_total3)
+      best_model<-row.names(aic_test)[which(aic_test$AIC==min(aic_test$AIC))]
+      best_model
+      
+    summary(lm_max3)
+    vdf_pre<-cbind(vdf[which(vdf$l>0),],predict(lm_max3,interval="confidence"))
+    
+    ggplot(vdf_pre,aes(x=max,y=r))+
+      geom_point()+
+      geom_line(aes(x=max,y=fit))+
+      geom_ribbon(aes(ymin=lwr,ymax=upr),alpha=0.1)+
+      xlab("Maximum Monthly Visitation 2015-2019")+
+      ylab(expression("Interest and Visitation Correlation R"^2))+
+      ylim(0,1)+
+      scale_x_continuous(labels= seq(0,600000,by=100000),breaks=seq(0,600000,by=100000))+
+      theme(panel.background = element_blank(),
+            panel.border = element_rect(fill=NA))
+    ggsave("F1.Correlation Between Search Interest and Visitation Varies with Maximum Monthly Visitation.jpg",
+           height=4,width=6)
+    
+    write.csv(vdf,"visitation_summary.csv")
+
+  
+#Examining Sites without Trends Data ####
+    vdf_nodata<-(subset(vdf,l==0))
+    summarize(vdf_nodata,
+              length=length(place),
+              max.min=min(max),
+              max.mean=mean(max),
+              max.max=max(max),
+              mean.min=min(mean),
+              mean.mean=mean(mean),
+              mean.max=max(mean),
+              mean.mean.sd=sd(mean)/(length^0.5))
+    
+    
